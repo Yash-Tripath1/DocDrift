@@ -2,54 +2,66 @@
 
 **Does this repo do what its README says?**
 
-DocDrift is a CLI agent prototype that clones a public GitHub repo, extracts runnable commands from its README, shows you a plan, and—only after explicit approval—runs those commands in a disposable Docker container and reports the exit codes and output.
+DocDrift is a command-line agent, not a dashboard. It inspects a public GitHub repo, turns runnable README instructions into a reviewable plan, and can execute approved checks in a disposable Docker sandbox while recording output as evidence.
 
-This is a tool, not a web dashboard. The current cut is deliberately small: it proves the execution loop before adding AI planning, broader claim extraction, endpoint checks, and repair proposals.
+> This is an early alpha. It deliberately starts with concrete, testable README instructions rather than claiming to understand every sentence.
 
-## Requirements
+## Quick start
 
-- Python 3.10+
-- `git`
-- Docker Engine/Desktop **only for execution**
-
-## Run it
-
-Plan only (safe default; does not run repository code):
+Requirements: Python 3.10+, `git`. Docker Engine/Desktop is required only to execute commands.
 
 ```bash
 python docdrift.py https://github.com/owner/repo
 ```
 
-Execute the listed commands after reviewing the plan:
+The default is **plan only**. It shallow-clones the repo, scans its root and nested README files, inventories common project files and test paths, and writes `docdrift-report.md` with the plan.
+
+To execute, review the plan and opt in:
 
 ```bash
 python docdrift.py https://github.com/owner/repo --execute
 ```
 
-DocDrift asks you to type `RUN` before it executes. Network access is disabled by default. Dependency-install commands will usually need network access, so opt in explicitly when you trust the repo:
+You must type `RUN` interactively. Commands are sequenced in one sandbox so dependency installation can affect later tests. The container has a 2 GB memory cap, 2 CPU cap, process limit, dropped Linux capabilities, no added privileges, an unprivileged user, and a writable mount only for the disposable clone. Network access is disabled by default.
+
+Dependency installation often needs network access; only enable it for a repository you trust:
 
 ```bash
 python docdrift.py https://github.com/owner/repo --execute --allow-network
 ```
 
-Optional flags:
+Machine-readable report and a longer timeout:
 
-- `--image IMAGE` — override the auto-selected Docker image.
-- `--timeout SECONDS` — per-command timeout (default: 120).
+```bash
+python docdrift.py https://github.com/owner/repo --execute --allow-network --repair \
+  --timeout 240 --report reports/audit.md --json reports/audit.json
+```
 
-## What this prototype does
+## Current capabilities
 
-- Shallow-clones a public GitHub repository into a temporary directory.
-- Finds a root README and extracts recognizable commands from fenced shell blocks.
-- Prints a reviewable plan with the README line and section for each command.
-- With `--execute`, launches a constrained, disposable Docker container and runs each command in sequence, preserving the container filesystem between steps.
-- Captures stdout/stderr and labels command exit 0 as `VERIFIED`, non-zero as `FALSIFIED`, and timeout as `UNVERIFIABLE`.
-- Removes the temporary clone and container when done.
+- Shallow clone and pinned short commit hash for the audit evidence.
+- Scans the root README plus nested README files while skipping common vendored/build directories; extracts allowlisted commands from fenced shell blocks and simple inline code.
+- Simple repository inventory: common language manifests, likely test paths, and top-level files.
+- Categorizes setup, tests, quickstart, and local endpoint commands; recognizes localhost URLs and documented API paths.
+- Runs finite documented commands in one shared sandbox, then launches recognized server commands detached and probes documented localhost URLs. Local endpoint probes use the container's Python or Node runtime.
+- Records exit code, duration, stdout/stderr, README file/line, and status (`VERIFIED`, `FALSIFIED`, `UNVERIFIABLE`, or `PLANNED`) in Markdown and optional JSON.
+- Skips obvious hazardous commands and flags likely GUI, placeholder, or incomplete commands as unverifiable instead of hanging/failing them.
+- With `--repair`, attempts one narrow fix: if a documented Python entrypoint is missing but exactly one matching basename exists elsewhere in the repo, reruns the corrected path in the sandbox. The original verdict remains falsified if the README's original command was wrong.
 
-## Current limits
+## Limits (honest ones)
 
-This v0 does not yet understand prose-only claims, infer undocumented commands, start long-running servers, probe HTTP endpoints, interpret semantic test results, or generate/apply repairs. It extracts only a practical subset of commands from fenced README shell blocks. A successful command is evidence that the command exited successfully in this environment—not proof of every claim surrounding it.
+- Only commands and endpoint-shaped claims are extracted. Prose-only promises, workflows, and implicit setup requirements are not yet converted into verifiable claims.
+- The supported command set is intentionally narrow. A skipped command is not proof that a claim is false.
+- Server launch detection is heuristic. Endpoints are only probed when a recognized README server command and localhost URL/path are present. `--base-url` can override the host/port while preserving the documented path.
+- A zero exit code verifies that exact command in this environment. It does not prove semantic correctness or that a test suite is comprehensive.
+- Repair is deliberately narrow and execution-only: it retries a uniquely located Python script path; it does not edit the README or invent arbitrary code changes. General repair patches, broader self-healing, remote GitHub integration, and LLM-based claim interpretation are not implemented yet.
 
 ## Safety
 
-A repository README is untrusted input. Do not execute code from a repo you do not trust. Execution requires `--execute` plus typing `RUN`; it runs in Docker with resource limits, dropped Linux capabilities, no-new-privileges, and no host mounts other than the temporary clone. Network is disabled unless you pass `--allow-network`. This is a useful first containment layer, not a claim of perfect isolation; keep Docker patched and never mount the Docker socket or secrets into the runner.
+README commands are untrusted code. Docker provides a useful containment layer, not a perfect security boundary. Keep Docker patched; do not mount your home directory, credentials, or Docker socket. Network is off by default; `--allow-network` gives sandboxed code outbound access. Do not execute repos you do not trust.
+
+## Checks for this tool
+
+```bash
+python -m unittest discover -s tests -v
+```
