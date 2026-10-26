@@ -70,6 +70,18 @@ curl https://example.org/
             steps = dd.extract_steps(path)
         self.assertEqual([s.command for s in steps], ["cd service && python app.py", "curl -i http://127.0.0.1:8000/health"])
 
+    def test_marks_self_invocation_and_placeholder_repo_as_manual(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docdrift.py").write_text("# tool")
+            steps = [
+                dd.Step("C001", "python docdrift.py https://github.com/owner/repo", "Quickstart", 1, "quickstart"),
+                dd.Step("C002", "python arbitrary.py https://github.com/org/project", "Usage", 2, "quickstart"),
+                dd.Step("C003", "python docdrift.py --version", "Install", 3, "quickstart"),
+            ]
+            dd.mark_manual_steps(steps, root)
+        self.assertEqual([s.status for s in steps], ["UNVERIFIABLE", "UNVERIFIABLE", "PLANNED"])
+
     def test_conservative_repair_requires_a_unique_existing_script(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

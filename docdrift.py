@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 SUPPORTED = {"python", "python3", "pip", "pip3", "pytest", "uv", "poetry", "npm", "npx", "pnpm", "yarn", "node", "make", "cargo", "go", "bundle", "ruby", "php", "composer", "curl"}
 LANGS = {"", "sh", "shell", "bash", "zsh", "console", "terminal", "cmd", "powershell", "shellsession"}
 DANGEROUS = re.compile(r"(?:^|[;&|]\s*)(?:sudo|su|shutdown|reboot|mkfs\b|dd\s+if=|docker\s+run|podman\s+run)\b|:\(\)\s*\{\s*:\s*\|\s*:\s*;?\s*\}|rm\s+-rf\s+(?:/|~)|(?:curl|wget)\b[^\n|]*\|\s*(?:sh|bash)", re.I)
@@ -303,10 +303,17 @@ def command_is_server(step: Step) -> bool:
     return step.category == "quickstart" and bool(re.search(strong, c))
 
 
-def mark_manual_steps(steps: list[Step]) -> None:
+def mark_manual_steps(steps: list[Step], repo: Path) -> None:
     for s in steps:
         c = s.command.strip()
-        if re.fullmatch(r"pip3?\s+install", c):
+        if (re.search(r"\bdocdrift\.py\b", c, re.I) and (repo / "docdrift.py").is_file()
+                and not re.search(r"--(?:version|help)\b", c)):
+            s.status = "UNVERIFIABLE"
+            s.reason = "self-invocation example; don't recursively run the auditing CLI inside its own audit"
+        elif re.search(r"https?://github\.com/(?:owner|username|your[-_\w]*|org|organization)/", c, re.I):
+            s.status = "UNVERIFIABLE"
+            s.reason = "placeholder repository URL; replace it with a real target before execution"
+        elif re.fullmatch(r"pip3?\s+install", c):
             s.status = "UNVERIFIABLE"
             s.reason = "incomplete install command: no package or requirements file specified"
         elif re.search(r"\b(?:browser|desktop|gui|tkinter|pyqt|pyside)\b", c, re.I) and s.category == "quickstart":
@@ -462,7 +469,7 @@ def audit(args: argparse.Namespace) -> int:
             steps = deduped
             for i, endpoint in enumerate(eps, 1):
                 endpoint["id"] = f"E{i:03}"
-            mark_manual_steps(steps)
+            mark_manual_steps(steps, repo)
         else:
             print("[2/4] No README found; documenting this as a failed documentation claim.")
             steps = [Step("D001", "A README exists in the repository", "documentation", 0, "documentation", status="FALSIFIED", exit_code=1, stderr="No README file was found.", source_file="")]
@@ -643,6 +650,7 @@ def audit(args: argparse.Namespace) -> int:
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="docdrift", description="Check README claims against a clean repo checkout.", epilog="Plan-only by default. Execution requires Docker, --execute, and typing RUN.")
+    p.add_argument("--version", action="version", version=f"DocDrift {VERSION}")
     p.add_argument("repo", help="Public GitHub repository URL")
     p.add_argument("--execute", action="store_true", help="Execute extracted README commands in isolated Docker")
     p.add_argument("--repair", action="store_true", help="After a failure, try one conservative inferred Python-script path correction and rerun it in the sandbox")

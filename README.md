@@ -10,9 +10,14 @@ DocDrift is a command-line agent, not a dashboard. It inspects a public GitHub r
 
 Requirements: Python 3.10+, `git`. Docker Engine/Desktop is required only to execute commands.
 
+Run directly from a checkout:
+
 ```bash
+python docdrift.py --version
 python docdrift.py https://github.com/owner/repo
 ```
+
+Or install an isolated command with `pipx install .` and use `docdrift https://github.com/owner/repo`.
 
 The default is **plan only**. It shallow-clones the repo, scans its root and nested README files, inventories common project files and test paths, and writes `docdrift-report.md` with the plan.
 
@@ -45,7 +50,7 @@ python docdrift.py https://github.com/owner/repo --execute --allow-network --rep
 - Categorizes setup, tests, quickstart, and local endpoint commands; recognizes localhost URLs and documented API paths.
 - Runs finite documented commands in one shared sandbox, then launches recognized server commands detached and probes documented localhost URLs. Local endpoint probes use the container's Python or Node runtime.
 - Records exit code, duration, stdout/stderr, README file/line, and status (`VERIFIED`, `FALSIFIED`, `UNVERIFIABLE`, or `PLANNED`) in Markdown and optional JSON.
-- Skips obvious hazardous commands and flags likely GUI, placeholder, or incomplete commands as unverifiable instead of hanging/failing them.
+- Skips obvious hazardous commands and flags recursive DocDrift examples, placeholder URLs, likely GUI, and incomplete commands as unverifiable instead of trying to run them.
 - With `--repair`, attempts one narrow fix: if a documented Python entrypoint is missing but exactly one matching basename exists elsewhere in the repo, reruns the corrected path in the sandbox. The original verdict remains falsified if the README's original command was wrong.
 
 ## Limits (honest ones)

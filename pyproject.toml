@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docdrift-cli"
+version = "0.3.1"
+description = "Verify documented repository setup and test commands in a Docker sandbox"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Yash Tripathi" }]
+dependencies = []
+
+[project.scripts]
+docdrift = "docdrift:main"
+
+[tool.setuptools]
+py-modules = ["docdrift"]
